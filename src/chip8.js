@@ -21,10 +21,8 @@ function init() {
 	then = Date.now();
 	startTime = then;
 
-	// TEST CODE
-	renderer.testRender();
-	renderer.render();
-	// TEST CODE
+	cpu.loadSpritesIntoMemory();
+	cpu.loadRom('BLITZ');
 
 	loop = requestAnimationFrame(step);
 }
@@ -34,9 +32,7 @@ function step() {
 	now = Date.now();
 	elapsed = now - then;
 
-	if (elapsed > fpsInterval) {
-		// Do loop.
-	}
+	if (elapsed > fpsInterval) cpu.cycle();
 
 	loop = requestAnimationFrame(step);
 }
