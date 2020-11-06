@@ -191,73 +191,212 @@ export default class CPU {
 				// Same as above except skips next instruction if NOT equal.
 				if (this.v[x] !== (opcode & 0xFF)) this.pc += 2;
 				break;
+			// SE Vx, Vy - 5xy0
 			case 0x5000:
+				// Compares value in Vx and Vy and skips instruction if equal.
+				if (this.v[x] === this.v[y]) this.pc += 2;
 				break;
+			// LD Vx, byte - 6xkk
 			case 0x6000:
+				// Load kk into Vx.
+				this.v[x] = (opcode & 0xFF);
 				break;
+			// ADD Vx, byte - 7xkk
 			case 0x7000:
+				// Add kk to Vx.
+				this.v[x] += (opcode & 0xFF);
 				break;
+				// Opcodes below, only the nibble changes hence nested switch to zoom in on nibble.
 			case 0x8000:
 				switch (opcode & 0xF) {
+					// LD Vx, Vy - 8xy0
 					case 0x0:
+						// Load Vy into Vx.
+						this.v[x] = this.v[y];
 						break;
+					// OR Vx, Vy - 8xy1
 					case 0x1:
+						// Set Vx to (Vx OR Vy).
+						this.v[x] |= this.v[y];
 						break;
+					// AND Vx, Vy - 8xy2
 					case 0x2:
+						// Set Vx to (Vx AND Vy).
+						this.v[x] &= this.v[y];
 						break;
+					// XOR Vx, Vy - 8xy3
 					case 0x3:
+						// Set Vx to (Vx XOR Vy).
+						this.v[x] ^= this.v[y];
 						break;
+					// ADD Vx, Vy - 8xy4
 					case 0x4:
+						// Set Vx to (Vx + Vy).
+						// Reference states - If the result is greater than 8 bits (i.e., > 255,) VF is set to 1,
+						// otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
+						const sum = (this.v[x] += this.v[y]);
+						// Set register VF = 0.
+						this.v[0xF] = 0;
+						// If sum greater than 255, set register VF = 1.
+						if (sum > 0xFF) this.v[0xF] = 1;
+						// Set Vx = the sum above. Because V register array is Uint8Array, any value over 8 bits
+						// automatically has lower, rightmost 8 bits taken and stored.
+						this.v[x] = sum;
 						break;
+					// SUB Vx, Vy - 8xy5
 					case 0x5:
+						// Subtracts Vy from Vx with overflow handling as above.
+						this.v[0xF] = 0;
+						if (this.v[x] > this.v[y]) this.v[0xF] = 1;
+						this.v[x] -= this.v[y];
 						break;
+					// SHR Vx {, Vy} - 8xy6
 					case 0x6:
+						// Determines the least significant bit and set to VF.
+						this.v[0xF] = (this.v[x] & 0x1);
+						this.v[x] >>= 1;
 						break;
+					// SUBN Vx, Vy - 8xy7
 					case 0x7:
+						// Subtracts Vx from Vy, stores in Vx; if Vy > Vx, VF = 1, otherwise 0.
+						this.v[0xF] = 0;
+						if (this.v[y] > this.v[x]) this.v[0xF] = 1;
+						this.v[x] = this.v[y] - this.v[x];
 						break;
+					// SHL Vx {, Vy} - 8xyE
 					case 0xE:
+						// Shifts Vx left 1 and sets VF to 0 or 1 depending on condition.
+						// Get most significant bit of Vx and store in VF. AND Vx with binary 10000000/0x80 to get
+						// most significant bit.
+						this.v[0xF] = (this.v[x] & 0x80);
+						// Multiply Vx by 2 by shifting left by 1.
+						this.v[x] <<= 1;
 						break;
 				}
 				break;
 
+			// SNE Vx, Vy - 9xy0
 			case 0x9000:
+				// Increments PC by 2 if Vx and Vy are not equal.
+				if (this.v[x] !== this.v[y]) this.pc += 2;
 				break;
+			// LD I, addr - Annn
 			case 0xA000:
+				// Set register I to nnn. e.g. 0xA740 & 0xFFF = 0x740.
+				this.i = (opcode & 0xFFF);
 				break;
+			// JP V0, addr - Bnnn
 			case 0xB000:
+				// Set PC to nnn plus the value of register V0.
+				this.pc = (opcode & 0xFFF) + this.v[0];
 				break;
+			// RND Vx, byte - Cxkk
 			case 0xC000:
+				// Generate a random number in range 0-255, then AND with lowest byte of opcode.
+				const rand = Math.floor(Math.random() * 0xFF);
+				this.v[x] = rand & (opcode & 0xFF);
 				break;
+			// DRW Vx, Vy, nibble - Dxyn
 			case 0xD000:
+				// Each pixel is 8 pixels wide.
+				const width = 8;
+				// Set to last nibble of opcode. e.g. opcode is 0xD235 -> height = 5.
+				const height = (opcode & 0xF);
+				// Set VF = 0.
+				this.v[0xF] = 0;
+				// Iterate over sprite rows.
+				for (let row = 0; row < height; row++) {
+					// Grab single row of sprite to iterate of its cols. Reference states, start at address in register I.
+					let sprite = this.memory[this.i + row];
+					// Iterate over sprite cols.
+					for (let col = 0; col < width; col++) {
+						// Check if bit is greater than 0 i.e. does not have a pixel at that location.
+						if ((sprite & 0x80) > 0) {
+							// Check return value of setPixel; if setPixel returns 1, erase pixel and set VF = 1;
+							// if setPixel returns 0, don't do anything and keep VF = 0;
+							// Then shift sprite left 1 bit to move through all bits.
+							if (this.renderer.setPixel(this.v[x] + col, this.v[x] + row)) this.v[0xF] = 1;
+						}
+					}
+					sprite <<= 1;
+				}
 				break;
+
 			case 0xE000:
 				switch (opcode & 0xFF) {
+					// SKP Vx - Ex9E
 					case 0x9E:
+						// Skip next instruction if key stored in Vx is pressed by incrementing PC by 2.
+						if (this.keyboard.isKeyPressed(this.v[x])) this.pc += 2;
 						break;
+						// SKNP Vx - ExA1
 					case 0xA1:
+						// Skip next instruction if key stored in Vx is NOT pressed by incrementing PC by 2.
+						if (!this.keyboard.isKeyPressed(this.v[x])) this.pc += 2;
 						break;
 				}
 				break;
 
 			case 0xF000:
 				switch (opcode & 0xFF) {
+					// LD Vx, DT - Fx07
 					case 0x07:
+						// Sets value in Vx to value in delayTimer.
+						this.v[x] = this.delayTimer;
 						break;
+					// LD Vx, K - Fx0A
 					case 0x0A:
+						// Pause the emulator until key pressed.
+						this.paused = true;
+						this.keyboard.onNextKeyPress = function onNextKeyPressed(key) {
+							this.v[x] = key;
+							this.paused = false;
+						}.bind(this);
 						break;
+					// LD DT, Vx - Fx15
 					case 0x15:
+						// Sets value in delayTimer to value in Vx
+						this.delayTimer = this.v[x];
 						break;
+					// LD ST, Vx - Fx18
 					case 0x18:
+						// Sets value in soundTimer to value in Vx
+						this.soundTimer = this.v[x];
 						break;
+					// ADD I, Vx - Fx1E
 					case 0x1E:
+						// Add Vx to I.
+						this.i += this.v[x];
 						break;
+					// LD F, Vx - ADD I, Vx - Fx29
 					case 0x29:
+						// Set register I to location of sprite at Vx; it's first multiplied by 5 as each sprite is
+						// 5 bytes long.
+						this.i = this.v[x] * 5;
 						break;
+					// LD B, Vx - Fx33
 					case 0x33:
+						// Get hundreds digit from Vx and store in I.
+						this.memory[this.i] = parseInt(this.v[x] / 100);
+						// Get tens digit from Vx and store in I+1. Get value between 0-99, divide by 10, gives
+						// value between 0-9.
+						this.memory[this.i + 1] = parseInt((this.v[x] % 100) / 10);
+						// Get ones (last) digit from Vx and store in I+2.
+						this.memory[this.i + 2] = parseInt(this.v[x] % 10);
 						break;
+					// LD [I], Vx - Fx55
 					case 0x55:
+						// Loop through registers V0-Vx and store values in memory starting at I.
+						for (let registerIndex = 0; registerIndex <= x; registerIndex++) {
+							this.memory[this.i + registerIndex] = this.v[registerIndex];
+						}
 						break;
+					// LD Vx, [I] - Fx65
 					case 0x65:
+						// Reads values from memory starting at I and stores into registers V0-Vx.
+						for (let registerIndex = 0; registerIndex <= x; registerIndex++) {
+							this.v[registerIndex] = this.memory[this.i + registerIndex];
+						}
 						break;
 				}
 				break;
