@@ -8,8 +8,8 @@ const renderer = new Renderer(10),
 	speaker = new Speaker(),
 	cpu = new CPU(renderer, keyboard, speaker);
 
+const fps = 60; // 60Hz (60x /sec) as per Chip-8 spec.
 let loop,
-	fps = 60, // 60Hz (60x /sec) as per Chip-8 spec.
 	fpsInterval,
 	startTime,
 	now,
@@ -22,7 +22,7 @@ function init() {
 	startTime = then;
 
 	cpu.loadSpritesIntoMemory();
-	cpu.loadRom('BLITZ');
+	cpu.loadRom('BLINKY');
 
 	loop = requestAnimationFrame(step);
 }

@@ -17,8 +17,8 @@ export default class CPU {
 		this.keyboard = keyboard;
 		this.speaker = speaker;
 
-		// 4096 bytes of memory.
-		this.memory = new Uint8Array(16);
+		// 4KB (4096 bytes) of memory.
+		this.memory = new Uint8Array(4096);
 
 		// 16 8-bit registers (V0-VF).
 		this.v = new Uint8Array(16);
@@ -109,7 +109,7 @@ export default class CPU {
 				// Memory is made of 8-bit pieces, but instruction is 16-bits / 2 bytes longs.
 				// Therefore opcode = two 8-bit halves of whole. Shift (this.pc) left by 8 bits
 				// and OR the (this.pc + 1) segment into opcode.
-				const opcode = (this.memory[this.pc] << 8 | this.memory[this.pc + 1]);
+				let opcode = (this.memory[this.pc] << 8 | this.memory[this.pc + 1]);
 				this.executeInstruction(opcode);
 			}
 		}
@@ -129,7 +129,7 @@ export default class CPU {
 	}
 
 	playSound() {
-		if (this.soundTimer > 0) this.speaker.play(40);
+		if (this.soundTimer > 0) this.speaker.play(440);
 		else this.speaker.stop();
 	}
 
@@ -315,10 +315,10 @@ export default class CPU {
 							// Check return value of setPixel; if setPixel returns 1, erase pixel and set VF = 1;
 							// if setPixel returns 0, don't do anything and keep VF = 0;
 							// Then shift sprite left 1 bit to move through all bits.
-							if (this.renderer.setPixel(this.v[x] + col, this.v[x] + row)) this.v[0xF] = 1;
+							if (this.renderer.setPixel(this.v[x] + col, this.v[y] + row)) this.v[0xF] = 1;
 						}
+						sprite <<= 1;
 					}
-					sprite <<= 1;
 				}
 				break;
 
