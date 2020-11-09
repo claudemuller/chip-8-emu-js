@@ -25,7 +25,7 @@ export default class Renderer {
 		// XOR pixel onto display.
 		this.display[pixelLoc] ^= 1;
 
-		// Return whether pixel was erased or not i.e. collision.
+		// Return whether pixel was erased or not.
 		return !this.display[pixelLoc];
 	}
 
